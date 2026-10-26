@@ -1,0 +1,536 @@
+--[[
+    本気おもちゃ回転ハブ【2系統】完全版
+    梯子多層陣 / 巨大の手 / 手ボタン / デュアルサイド / 流星放射 / 説明タブ
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local LP = LocalPlayer
+
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/jadpy/suki/refs/heads/main/orion"))()
+
+local Theme = {
+    BackgroundColor = Color3.fromRGB(255, 255, 255),
+    SliderColor     = Color3.fromRGB(0, 0, 0),
+    TextColor       = Color3.fromRGB(0, 0, 0),
+}
+
+----------------------------------------------------------------
+-- 日本語表示名 ↔ ID
+----------------------------------------------------------------
+local ObjectDisplay = {
+    {jp = "線香花火",                id = "FireworkSparkler"},
+    {jp = "薄い茶色パレット",        id = "PalletLightBrown"},
+    {jp = "グレーガラス箱",          id = "GlassBoxGray"},
+    {jp = "音楽キーボード",          id = "MusicKeyboard"},
+    {jp = "不気味なロウソク①",      id = "SpookyCandle1"},
+    {jp = "テトラキューブ",          id = "Tetracube1"},
+    {jp = "忍者刀",                  id = "NinjaKatana"},
+    {jp = "おとり人形",              id = "YouDecoy"},
+    {jp = "爆弾ミサイル",            id = "BombMissile"},
+    {jp = "薄い茶色ハシゴ",          id = "LadderLightBrown"},
+    {jp = "ブロブマン",              id = "CreatureBlobman"},
+    {jp = "ディスコカラーボール",    id = "DiscoColorBall"},
+    {jp = "ピンク鉱物クリスタル",    id = "MineralCrystalPink"},
+    {jp = "浮遊島",                  id = "FloatingIsland"},
+    {jp = "飛行UFO",                 id = "FlyingToyUfo"},
+    {jp = "青ジュークボックス",      id = "JukeboxBlue"},
+    {jp = "オレンジジュークボックス",id = "JukeboxOrange"},
+    {jp = "青ソファ",                id = "CouchBlue"},
+    {jp = "ピンクソファ",            id = "CouchPink"},
+    {jp = "白ソファ",                id = "CouchWhite"},
+    {jp = "ブームボックス",          id = "Boombox"},
+    {jp = "花火ミサイル",            id = "FireworkMissile"},
+    {jp = "雪の結晶",                id = "Snowflake"},
+    {jp = "不気味なロウソク⑤",      id = "SpookyCandle5"},
+    {jp = "ダイヤモンド鉱物",        id = "MineralDiamond"},
+    {jp = "緑トラクター",            id = "TractorGreen"},
+    {jp = "オレンジトラクター",      id = "TractorOrange"},
+    {jp = "赤トラクター",            id = "TractorRed"},
+}
+
+local function getJapaneseName(id)
+    for _, item in ipairs(ObjectDisplay) do
+        if item.id == id then return item.jp end
+    end
+    return id
+end
+
+----------------------------------------------------------------
+-- 形状定義
+----------------------------------------------------------------
+local Shapes = {}
+
+Shapes["円形"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed
+    return Vector3.new(math.cos(a)*cfg.Radius, cfg.Height, math.sin(a)*cfg.Radius)
+end
+
+Shapes["羽"] = function(i, count, t, cfg)
+    local half = math.floor(count/2)
+    local x = (i - half - 0.5) * (cfg.Radius * 0.35)
+    local wave = math.sin(t * cfg.Speed + i*0.4) * cfg.Pulse * 2
+    return Vector3.new(x, cfg.Height + wave, -cfg.Radius * 0.6)
+end
+
+Shapes["ハート"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed
+    local s = cfg.Radius / 16
+    local x = 16 * math.sin(a)^3 * s
+    local y = (13*math.cos(a) - 5*math.cos(2*a) - 2*math.cos(3*a) - math.cos(4*a)) * s
+    local pulse = 1 + math.sin(t*cfg.Speed*1.5)*cfg.Pulse*0.15
+    return Vector3.new(x*pulse, cfg.Height + y*pulse, 0)
+end
+
+Shapes["ビッグハート"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed * 0.6
+    local s = cfg.Radius / 12
+    local x = 16 * math.sin(a)^3 * s
+    local y = (13*math.cos(a) - 5*math.cos(2*a) - 2*math.cos(3*a) - math.cos(4*a)) * s * 1.3
+    local pulse = 1 + math.sin(t*2)*cfg.Pulse*0.2
+    return Vector3.new(x*pulse, cfg.Height + y*pulse, 0)
+end
+
+Shapes["ダビデの星"] = function(i, count, t, cfg)
+    local a = (i-1)/6 * math.pi*2 + t * cfg.Speed
+    local r = cfg.Radius * (i%2==0 and 1 or 0.55)
+    local h = (i%2==0 and 1 or -1) * cfg.Pulse
+    return Vector3.new(math.cos(a)*r, cfg.Height + h, math.sin(a)*r)
+end
+
+Shapes["五芒星"] = function(i, count, t, cfg)
+    local idx = (i-1) % 10
+    local isOuter = idx % 2 == 0
+    local a = idx * (math.pi / 5) + t * cfg.Speed
+    local r = isOuter and cfg.Radius or cfg.Radius * 0.4
+    local tw = 1 + math.sin(t*3 + i)*0.12
+    return Vector3.new(math.cos(a)*r*tw, cfg.Height, math.sin(a)*r*tw)
+end
+
+Shapes["球体"] = function(i, count, t, cfg)
+    local side = math.ceil(math.sqrt(count))
+    local lat = math.floor((i-1) / side)
+    local lon = (i-1) % side
+    local la = (lat / side - 0.5) * math.pi
+    local lo = lon / side * math.pi*2 + t * cfg.Speed
+    local r = cfg.Radius * (1 + math.sin(t*2)*cfg.Pulse*0.1)
+    return Vector3.new(
+        r * math.cos(la) * math.cos(lo),
+        cfg.Height + r * math.sin(la),
+        r * math.cos(la) * math.sin(lo)
+    )
+end
+
+Shapes["螺旋"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*8 + t * cfg.Speed
+    local h = ((i-1)/count - 0.5) * cfg.Radius * 2.2
+    local r = cfg.Radius * 0.7
+    return Vector3.new(math.cos(a)*r, cfg.Height + h, math.sin(a)*r)
+end
+
+Shapes["無限大"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed
+    local scale = cfg.Radius * 0.7
+    local x = scale * math.sin(a)
+    local z = scale * math.sin(a) * math.cos(a)
+    local y = math.sin(a*2) * cfg.Pulse
+    return Vector3.new(x, cfg.Height + y, z)
+end
+
+Shapes["花びら"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed
+    local r = cfg.Radius * (0.4 + 0.6 * math.abs(math.sin(a * 6)))
+    local open = 1 + math.sin(t*1.2)*cfg.Pulse*0.3
+    return Vector3.new(math.cos(a)*r*open, cfg.Height + math.sin(a*3)*0.8, math.sin(a)*r*open)
+end
+
+Shapes["ピラミッド"] = function(i, count, t, cfg)
+    local layers = 4
+    local layer = math.floor((i-1) / (count/layers))
+    local inLayer = (i-1) % math.ceil(count/layers)
+    local layerCount = math.ceil(count/layers)
+    local a = inLayer / layerCount * math.pi*2 + t * cfg.Speed * 0.5
+    local r = cfg.Radius * (1 - layer/(layers-1)) * 0.9
+    local h = layer * (cfg.Radius * 0.55)
+    return Vector3.new(math.cos(a)*r, cfg.Height + h, math.sin(a)*r)
+end
+
+Shapes["ドーナツ"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed
+    local tube = cfg.Radius * 0.28
+    local R = cfg.Radius * 0.75
+    local x = (R + tube * math.cos(a*3)) * math.cos(a)
+    local z = (R + tube * math.cos(a*3)) * math.sin(a)
+    local y = tube * math.sin(a*3)
+    return Vector3.new(x, cfg.Height + y, z)
+end
+
+Shapes["波"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed
+    local wave = math.sin(a*3 + t*2) * cfg.Pulse * 3
+    return Vector3.new(math.cos(a)*cfg.Radius, cfg.Height + wave, math.sin(a)*cfg.Radius)
+end
+
+Shapes["蝶"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2
+    local wing = math.sin(t * cfg.Speed * 2)
+    local x = math.sin(a) * cfg.Radius * (0.6 + 0.4*math.abs(wing))
+    local z = math.cos(a) * cfg.Radius * 0.35
+    local y = math.sin(a*2) * cfg.Pulse + wing * 1.5
+    if a > math.pi then x = -x end
+    return Vector3.new(x, cfg.Height + y, z)
+end
+
+Shapes["銀河"] = function(i, count, t, cfg)
+    local arm = (i % 3)
+    local a = (i-1)/count * math.pi*6 + t * cfg.Speed + arm * 2.1
+    local r = cfg.Radius * ((i-1)/count) ^ 0.7
+    local h = math.sin(a*2) * cfg.Pulse * 1.5
+    return Vector3.new(math.cos(a)*r, cfg.Height + h, math.sin(a)*r)
+end
+
+Shapes["立方体"] = function(i, count, t, cfg)
+    local edges = {
+        {1,1,1},{1,1,-1},{1,-1,1},{1,-1,-1},{-1,1,1},{-1,1,-1},{-1,-1,1},{-1,-1,-1}
+    }
+    local e1 = edges[((i-1)%8)+1]
+    local e2 = edges[(((i-1)+1)%8)+1]
+    local f = ((i-1)/count) % 1
+    local p = Vector3.new(
+        e1[1] + (e2[1]-e1[1])*f,
+        e1[2] + (e2[2]-e1[2])*f,
+        e1[3] + (e2[3]-e1[3])*f
+    ) * cfg.Radius * 0.7
+    local rot = CFrame.Angles(0, t*cfg.Speed, t*cfg.Speed*0.7)
+    return (rot * p) + Vector3.new(0, cfg.Height, 0)
+end
+
+Shapes["雷"] = function(i, count, t, cfg)
+    local seg = (i-1) / math.max(count-1, 1)
+    local x = (seg - 0.5) * cfg.Radius * 2
+    local z = math.sin(seg * 12 + t * cfg.Speed * 3) * cfg.Radius * 0.4
+    local y = math.abs(math.sin(seg * 8 + t*2)) * cfg.Pulse * 4
+    return Vector3.new(x, cfg.Height + y, z)
+end
+
+Shapes["魔法陣リング"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed
+    local h = math.sin(a*4 + t) * cfg.Pulse * 0.8
+    return Vector3.new(math.cos(a)*cfg.Radius, cfg.Height + h, math.sin(a)*cfg.Radius)
+end
+
+Shapes["魔法陣六芒"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed
+    local tri = (i % 6 < 3) and 1 or -1
+    local r = cfg.Radius * (0.7 + 0.3*math.sin(a*3))
+    return Vector3.new(math.cos(a)*r, cfg.Height + tri * cfg.Pulse, math.sin(a)*r)
+end
+
+Shapes["魔法陣多重"] = function(i, count, t, cfg)
+    local ring = math.floor((i-1) / (count/3))
+    local a = ((i-1) % (count/3)) / (count/3) * math.pi*2 + t * cfg.Speed * (1 + ring*0.3)
+    local r = cfg.Radius * (0.45 + ring * 0.28)
+    return Vector3.new(math.cos(a)*r, cfg.Height + ring * 1.2, math.sin(a)*r)
+end
+
+Shapes["カオスボール"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed * 2
+    local chaos = math.sin(t*3 + i)*cfg.Pulse*2
+    local r = cfg.Radius + chaos
+    local h = math.cos(t*2.5 + i*0.7) * cfg.Pulse * 3
+    return Vector3.new(math.cos(a)*r, cfg.Height + h, math.sin(a)*r)
+end
+
+Shapes["上昇螺旋"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*10 + t * cfg.Speed
+    local rise = ((t * cfg.Speed * 0.4) + (i/count)) % 1
+    local h = rise * cfg.Radius * 2.5
+    local r = cfg.Radius * (1 - rise * 0.4)
+    return Vector3.new(math.cos(a)*r, cfg.Height + h, math.sin(a)*r)
+end
+
+Shapes["爆発リング"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed * 0.5
+    local explode = (math.sin(t * cfg.Speed) + 1) * 0.5
+    local r = cfg.Radius * (0.3 + explode * 1.4)
+    local h = math.sin(a*2) * cfg.Pulse * explode * 2
+    return Vector3.new(math.cos(a)*r, cfg.Height + h, math.sin(a)*r)
+end
+
+-- ★流星放射（動画の上向きトンネル・流星群）
+Shapes["流星放射"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed * 0.15
+    local depth = ((i + t * cfg.Speed * 8) % count) / count   -- 奥から手前に流れる
+    local r = cfg.Radius * (0.15 + depth * 1.4)
+    local h = cfg.Height + depth * cfg.Radius * 3.5
+    local x = math.cos(a) * r
+    local z = math.sin(a) * r
+    return Vector3.new(x, h, z)
+end
+
+-- ★バカ強い追加形
+Shapes["ブラックホール"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*8 + t * cfg.Speed * 2
+    local spiral = ((i-1)/count)
+    local r = cfg.Radius * (0.1 + spiral * 0.95)
+    local h = cfg.Height + math.sin(a*2) * cfg.Pulse * 1.5 - spiral * 2
+    return Vector3.new(math.cos(a)*r, h, math.sin(a)*r)
+end
+
+Shapes["龍の軌道"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*6 + t * cfg.Speed
+    local wave1 = math.sin(a * 2.5) * cfg.Radius * 0.35
+    local wave2 = math.cos(a * 1.7) * cfg.Radius * 0.25
+    local h = cfg.Height + math.sin(a * 3 + t) * cfg.Pulse * 2.5
+    return Vector3.new(math.cos(a)*cfg.Radius + wave1, h, math.sin(a)*cfg.Radius + wave2)
+end
+
+Shapes["神の目"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*2 + t * cfg.Speed * 0.4
+    local eye = math.abs(math.sin(a * 2))
+    local r = cfg.Radius * (0.3 + eye * 0.7)
+    local h = cfg.Height + (1 - eye) * 3
+    return Vector3.new(math.cos(a)*r, h, math.sin(a)*r * 0.6)
+end
+
+Shapes["台風"] = function(i, count, t, cfg)
+    local a = (i-1)/count * math.pi*10 + t * cfg.Speed * 1.5
+    local layer = math.floor((i-1) / (count/4))
+    local r = cfg.Radius * (0.3 + layer * 0.25)
+    local h = cfg.Height + math.sin(a + layer) * cfg.Pulse
+    return Vector3.new(math.cos(a)*r, h, math.sin(a)*r)
+end
+
+Shapes["梯子多層陣"] = function(i, count, t, cfg)
+    local layerCount = 5
+    local layer = math.floor((i-1) / (count / layerCount))
+    local inLayer = (i-1) % math.ceil(count / layerCount)
+    local layerSize = math.ceil(count / layerCount)
+    local a = (inLayer / layerSize) * math.pi * 2 + t * cfg.Speed
+
+    local r, h, tilt
+    local h1 = cfg.LadderH1 or 5.5
+    local h2 = cfg.LadderH2 or 2.0
+    local h3 = cfg.LadderH3 or 3.4
+    local h4 = cfg.LadderH4 or 1.6
+
+    if layer == 0 then
+        r = cfg.Radius * 1.38
+        h = cfg.Height - 2.2
+        tilt = 0.05
+    elseif layer == 1 then
+        r = cfg.Radius * 1.08
+        h = cfg.Height + h4
+        tilt = 1.35
+    elseif layer == 2 then
+        r = cfg.Radius * 0.78
+        h = cfg.Height + h3
+        tilt = 0.95
+    elseif layer == 3 then
+        r = cfg.Radius * 0.48
+        h = cfg.Height + h2
+        tilt = 1.42
+    else
+        r = cfg.Radius * 0.22
+        h = cfg.Height + h1
+        tilt = 0.65
+    end
+
+    local pulse = 1 + math.sin(t * 1.8 + layer) * cfg.Pulse * 0.08
+    r = r * pulse
+
+    local x = math.cos(a) * r
+    local z = math.sin(a) * r
+    return Vector3.new(x, h, z), tilt, a
+end
+
+Shapes["梯子多層陣・強化"] = function(i, count, t, cfg)
+    local layerCount = 6
+    local layer = math.floor((i-1) / (count / layerCount))
+    local inLayer = (i-1) % math.ceil(count / layerCount)
+    local layerSize = math.ceil(count / layerCount)
+    local a = (inLayer / layerSize) * math.pi * 2 + t * cfg.Speed * 0.85
+
+    local r, h, tilt
+    local h1 = cfg.LadderH1 or 6.0
+    local h2 = cfg.LadderH2 or 2.2
+    local h3 = cfg.LadderH3 or 2.8
+    local h4 = cfg.LadderH4 or 1.2
+
+    if layer == 0 then
+        r = cfg.Radius * 1.45
+        h = cfg.Height - 2.5
+        tilt = 0.04
+    elseif layer == 1 then
+        r = cfg.Radius * 1.20
+        h = cfg.Height + h4
+        tilt = 1.30
+    elseif layer == 2 then
+        r = cfg.Radius * 0.95
+        h = cfg.Height + h3
+        tilt = 1.05
+    elseif layer == 3 then
+        r = cfg.Radius * 0.65
+        h = cfg.Height + 4.0
+        tilt = 1.38
+    elseif layer == 4 then
+        r = cfg.Radius * 0.40
+        h = cfg.Height + h2
+        tilt = 1.45
+    else
+        r = cfg.Radius * 0.18
+        h = cfg.Height + h1
+        tilt = 0.55
+    end
+
+    local pulse = 1 + math.sin(t * 2.1 + layer * 0.7) * cfg.Pulse * 0.1
+    r = r * pulse
+
+    local x = math.cos(a) * r
+    local z = math.sin(a) * r
+    return Vector3.new(x, h, z), tilt, a
+end
+
+Shapes["巨大の手"] = function(i, count, t, cfg)
+    local handCount = cfg.HandCount or 5
+    local fingersPerHand = cfg.FingerCount or 5
+    local laddersPerFinger = math.max(3, math.floor(count / (handCount * fingersPerHand)))
+
+    local handIndex = math.floor((i-1) / (count / handCount))
+    local inHand = (i-1) % math.ceil(count / handCount)
+    local fingerIndex = math.floor(inHand / math.max(1, laddersPerFinger))
+    local inFinger = inHand % math.max(1, laddersPerFinger)
+
+    local handAngle = (handIndex / handCount) * math.pi * 2 + t * cfg.Speed * 0.3
+
+    local handRadius = cfg.Radius * 0.55
+    local handCenterX = math.cos(handAngle) * handRadius
+    local handCenterZ = math.sin(handAngle) * handRadius
+    local handBaseHeight = cfg.Height + 1.5
+
+    local fingerSpread = cfg.FingerSpread or 1.1
+    local fingerAngleOffset = (fingerIndex - (fingersPerHand-1)/2) * (fingerSpread / fingersPerHand)
+    local fingerAngle = handAngle + fingerAngleOffset + math.pi
+
+    local fingerProgress = inFinger / math.max(1, laddersPerFinger - 1)
+
+    local curve = math.sin(fingerProgress * math.pi * 0.9) * 0.6
+    local fingerLength = cfg.Radius * 0.7
+
+    local fx = handCenterX + math.cos(fingerAngle) * (fingerProgress * fingerLength)
+    local fz = handCenterZ + math.sin(fingerAngle) * (fingerProgress * fingerLength)
+    local fy = handBaseHeight + fingerProgress * 4.5 + curve * 2.2 + math.sin(t * 1.5 + handIndex) * cfg.Pulse * 0.4
+
+    local tilt = 0.9 - fingerProgress * 0.35
+
+    return Vector3.new(fx, fy, fz), tilt, fingerAngle
+end
+
+Shapes["巨大の手・密集"] = function(i, count, t, cfg)
+    local handCount = cfg.HandCount or 4
+    local fingersPerHand = cfg.FingerCount or 6
+    local laddersPerFinger = math.max(4, math.floor(count / (handCount * fingersPerHand)))
+
+    local handIndex = math.floor((i-1) / (count / handCount))
+    local inHand = (i-1) % math.ceil(count / handCount)
+    local fingerIndex = math.floor(inHand / math.max(1, laddersPerFinger))
+    local inFinger = inHand % math.max(1, laddersPerFinger)
+
+    local handAngle = (handIndex / handCount) * math.pi * 2 + t * cfg.Speed * 0.25
+
+    local handRadius = cfg.Radius * 0.5
+    local handCenterX = math.cos(handAngle) * handRadius
+    local handCenterZ = math.sin(handAngle) * handRadius
+    local handBaseHeight = cfg.Height + 2.0
+
+    local fingerSpread = cfg.FingerSpread or 1.35
+    local fingerAngleOffset = (fingerIndex - (fingersPerHand-1)/2) * (fingerSpread / fingersPerHand)
+    local fingerAngle = handAngle + fingerAngleOffset + math.pi
+
+    local fingerProgress = inFinger / math.max(1, laddersPerFinger - 1)
+    local sideOffset = ((i % 3) - 1) * 0.35
+
+    local curve = math.sin(fingerProgress * math.pi) * 0.85
+    local fingerLength = cfg.Radius * 0.85
+
+    local fx = handCenterX + math.cos(fingerAngle) * (fingerProgress * fingerLength) + math.cos(fingerAngle + math.pi/2) * sideOffset
+    local fz = handCenterZ + math.sin(fingerAngle) * (fingerProgress * fingerLength) + math.sin(fingerAngle + math.pi/2) * sideOffset
+    local fy = handBaseHeight + fingerProgress * 5.5 + curve * 2.8 + math.sin(t * 1.2 + handIndex * 0.8) * cfg.Pulse * 0.5
+
+    local tilt = 1.05 - fingerProgress * 0.4
+
+    return Vector3.new(fx, fy, fz), tilt, fingerAngle
+end
+
+local function dualSideOffset(i, count, t, cfg, side)
+    local mode = cfg.DualMode or "円形スポーク"
+    local localCount = math.floor(count / 2)
+    local localI = ((i-1) % localCount) + 1
+    local sideOffsetX = side * (cfg.DualDistance or 8)
+
+    if mode == "円形スポーク" then
+        local a = (localI-1)/localCount * math.pi*2 + t * cfg.Speed
+        local r = cfg.Radius * 0.7
+        local x = sideOffsetX + math.cos(a) * r
+        local z = math.sin(a) * r
+        local y = cfg.Height + math.sin(a*3 + t) * cfg.Pulse * 0.4
+        return Vector3.new(x, y, z)
+    elseif mode == "星形" then
+        local a = (localI-1)/localCount * math.pi*2 + t * cfg.Speed
+        local r = cfg.Radius * (0.45 + 0.35 * math.abs(math.sin(a * 5)))
+        local x = sideOffsetX + math.cos(a) * r
+        local z = math.sin(a) * r
+        local y = cfg.Height
+        return Vector3.new(x, y, z)
+    elseif mode == "三角回転" then
+        local a = (localI-1)/localCount * math.pi*2 + t * cfg.Speed
+        local tri = math.abs(math.sin(a * 1.5))
+        local r = cfg.Radius * (0.5 + tri * 0.4)
+        local x = sideOffsetX + math.cos(a) * r
+        local z = math.sin(a) * r
+        local y = cfg.Height + math.sin(a*2) * cfg.Pulse * 0.6
+        return Vector3.new(x, y, z)
+    elseif mode == "二重リング" then
+        local ring = (localI % 2 == 0) and 1 or 0.55
+        local a = (localI-1)/localCount * math.pi*2 + t * cfg.Speed * (ring > 0.7 and 1 or -0.7)
+        local r = cfg.Radius * ring
+        local x = sideOffsetX + math.cos(a) * r
+        local z = math.sin(a) * r
+        local y = cfg.Height + (ring > 0.7 and 0.8 or -0.4)
+        return Vector3.new(x, y, z)
+    else
+        local a = (localI-1)/localCount * math.pi*2 + t * cfg.Speed
+        local r = cfg.Radius * 0.65
+        local x = sideOffsetX + math.cos(a) * r
+        local z = math.sin(a) * r
+        local y = cfg.Height
+        return Vector3.new(x, y, z)
+    end
+end
+
+Shapes["デュアルサイド"] = function(i, count, t, cfg)
+    local half = math.floor(count / 2)
+    local side = (i <= half) and -1 or 1
+    return dualSideOffset(i, count, t, cfg, side)
+end
+
+local modeList = {
+    "円形","羽","ハート","ビッグハート","ダビデの星","五芒星",
+    "球体","螺旋","無限大","花びら","ピラミッド","ドーナツ",
+    "波","蝶","銀河","立方体","雷",
+    "魔法陣リング","魔法陣六芒","魔法陣多重",
+    "カオスボール","上昇螺旋","爆発リング",
+    "流星放射","ブラックホール","龍の軌道","神の目","台風",
+    "梯子多層陣","梯子多層陣・強化",
+    "デュアルサイド"
+}
+
+local handModeList = {
+    "巨大の手",
+    "巨大の手・密集"
+}
+
+---------------------------
